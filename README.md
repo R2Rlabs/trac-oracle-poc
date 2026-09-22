@@ -40,6 +40,7 @@ mainnet set.
 ```sh
 npm install
 npm run fetch-fixtures   # optional: refresh trust anchor + real updates
+PYTH_API_KEY=... npm run fetch-fixtures   # BTC/USD + ETH/USD from Pyth Hermes
 npm test
 npm run demo
 ```
@@ -59,6 +60,10 @@ Not covered yet:
   source on Trac (open question for the Trac team). Consumers currently only get monotonic publish times.
 - **Signer rotation.** Changing the trust anchor means shipping a new contract version. Verifying Pyth's
   signer-set-upgrade messages on-chain would remove that step.
-- **Getting updates.** Pyth's Hermes API now needs an API key; fixtures come from Arbitrum calldata instead.
+- **BTC and ETH data.** Since Pyth's Core upgrade (2026-08-26) Hermes needs an API key. With `PYTH_API_KEY`
+  set, the fixture script fetches BTC/USD + ETH/USD (the product's markets); that path is untested until a
+  key is available. Without a key it falls back to feeds recently pushed on Arbitrum, which as of 2026-09-22
+  are WBTC/USD, SUI/USD and XAUT/USD only: nobody pushes BTC/USD or ETH/USD there, or on Base, Optimism or
+  Ethereum.
 - **Tx size.** trac-peer caps tx payloads at 4 KB by default (about 5 feeds per update). The protocol
   raises it to 8 KB.

@@ -3,14 +3,20 @@ import fs from 'fs';
 import { hexToBytes, bytesToHex } from '@noble/hashes/utils';
 import { withOraclePeer, memoryStorage } from './helpers/peer.js';
 import { buildUpdate, makeSigner } from './helpers/build-update.js';
-import { priceKey } from '../src/oracle-contract.js';
+import { priceKey, FEEDS } from '../src/oracle-contract.js';
+import { verifyPythUpdate } from '../src/pyth-verifier.js';
 import { TRUST_ANCHOR } from '../src/trust-anchor.js';
 
 // Fixtures come newest first; sort oldest first so the ordering tests read naturally.
 const FIXTURES = JSON.parse(fs.readFileSync(new URL('./fixtures/updates.json', import.meta.url))).reverse();
 const OLDEST = FIXTURES[0].hex;
 const NEWEST = FIXTURES[FIXTURES.length - 1].hex;
-const WBTC = 'c9d8b075a5c69303365ae23633d4e085199bf5c520a3b90fed1322a0342ffc33';
+// Which tracked feeds the fixtures carry depends on where they came from (Hermes: BTC and ETH;
+// Arbitrum fallback: whatever was pushed there), so derive expectations from the data.
+const trackedIds = (hex) => verifyPythUpdate(hex, TRUST_ANCHOR).prices.map((p) => p.feedId).filter((id) => FEEDS[id]);
+const TRACKED = trackedIds(NEWEST).map((id) => FEEDS[id]).sort();
+// A tracked feed present in every fixture, followed across updates by the ordering tests.
+const WATCHED = trackedIds(NEWEST).find((id) => FIXTURES.every((f) => trackedIds(f.hex).includes(id)));
 const BTC = 'e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43';
 
 const submit = (update) => ({ type: 'submitPriceUpdate', value: { update } });
@@ -31,7 +37,7 @@ test('a real Pyth update settles through the trac-peer tx path (simulated)', asy
         const started = performance.now();
         const res = await peer.protocol.instance.simulateTransaction(peer.wallet.publicKey, submit(NEWEST));
         const ms = performance.now() - started;
-        t.alike(res.updated.sort(), ['SUI/USD', 'WBTC/USD', 'XAUT/USD']);
+        t.alike(res.updated.sort(), TRACKED);
         t.comment(`contract execution incl. verification: ${ms.toFixed(1)} ms`);
     });
 });
@@ -60,16 +66,16 @@ test('prices only move forward: old signed updates cannot roll the price back', 
         const storage = memoryStorage();
 
         const first = await contract.execute(txOp(peer, submit(NEWEST)), storage);
-        t.alike(first.updated.sort(), ['SUI/USD', 'WBTC/USD', 'XAUT/USD']);
-        const stored = storage.values.get(priceKey(WBTC));
-        t.is(stored.symbol, 'WBTC/USD');
+        t.alike(first.updated.sort(), TRACKED);
+        const stored = storage.values.get(priceKey(WATCHED));
+        t.is(stored.symbol, FEEDS[WATCHED]);
         t.is(stored.submittedBy, peer.wallet.publicKey);
 
         // Replaying an older, genuinely signed update: valid signatures, but stale.
         const replay = await contract.execute(txOp(peer, submit(OLDEST)), storage);
         t.is(replay?.name, 'AssertionError');
         t.ok(/no newer prices/.test(replay.message), replay.message);
-        t.alike(storage.values.get(priceKey(WBTC)), stored, 'price unchanged');
+        t.alike(storage.values.get(priceKey(WATCHED)), stored, 'price unchanged');
 
         // Resubmitting the same update is also a no-op.
         const again = await contract.execute(txOp(peer, submit(NEWEST)), storage);
@@ -84,7 +90,7 @@ test('updates apply in order when submitted oldest to newest', async (t) => {
         for (const f of FIXTURES) {
             const res = await peer.contract.instance.execute(txOp(peer, submit(f.hex)), storage);
             t.ok(Array.isArray(res?.updated), f.source);
-            const time = BigInt(storage.values.get(priceKey(WBTC)).publishTime);
+            const time = BigInt(storage.values.get(priceKey(WATCHED)).publishTime);
             t.ok(time > lastTime);
             lastTime = time;
         }
