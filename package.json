@@ -1,0 +1,20 @@
+{
+  "name": "trac-oracle-poc",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Proof of concept: a Trac Network contract that verifies Pyth price updates signed by Wormhole guardians, with no admin in the price path.",
+  "scripts": {
+    "fetch-fixtures": "node scripts/fetch-fixtures.mjs",
+    "test": "brittle-node -t 120000 test/*.test.js",
+    "demo": "node scripts/demo.mjs"
+  },
+  "dependencies": {
+    "@noble/curves": "^1.9.0",
+    "@noble/hashes": "^1.8.0",
+    "trac-peer": "github:Trac-Systems/trac-peer#54a79ff8206a2f98bf3bf134260965c752618d9a"
+  },
+  "devDependencies": {
+    "brittle": "^3.19.1"
+  }
+}
