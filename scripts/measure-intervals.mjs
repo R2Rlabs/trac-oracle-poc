@@ -1,24 +1,78 @@
-// How often does a fresh Pyth price actually land? Measures the gaps between accepted publishTimes,
-// which is what Halyard's staleness threshold has to tolerate.
+// How often does a fresh Pyth price actually land? Measures the gaps between publishTimes, which is
+// what Halyard's staleness threshold has to tolerate.
 //
-// Hermes needs an API key, so this reads what is observable without one: PriceFeedUpdate events from
-// Pyth's contract on Arbitrum. That is a pull chain, so it measures how often somebody paid to push a
-// fresh price, not how fast Pythnet publishes. Halyard is also pull-based, so this is the closer
-// number for us: it is the cadence a busy market produces in practice.
+// With PYTH_API_KEY set it polls Hermes and measures Pythnet's own publish cadence, which is the
+// number the threshold should be set against.
+//
+// Without a key it falls back to PriceFeedUpdate events from Pyth's contract on a pull chain, which
+// measures how often somebody paid to push a fresh price, not how fast Pythnet publishes. Observed
+// 2026-09-24: a median of 282s between updates on Arbitrum and 1,190s on Base, which is demand being
+// low rather than Pyth being slow.
 //
 // Usage: node scripts/measure-intervals.mjs [blocks]
+//        PYTH_API_KEY=... node scripts/measure-intervals.mjs
+//        RPC=https://mainnet.base.org PYTH_ADDRESS=0x8250f4aF4B972684F7b336503E2D6dFeDeB1487a node scripts/measure-intervals.mjs
 import { keccak_256 } from '@noble/hashes/sha3';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
 
-const ARB_RPC = process.env.ARB_RPC ?? 'https://arb1.arbitrum.io/rpc';
-const PYTH_ARBITRUM = '0xff1a0f4744e8582DF1aE09D5611b887B6a12925C';
+const RPC = process.env.RPC ?? 'https://arb1.arbitrum.io/rpc';
+const HERMES_URL = process.env.PYTH_HERMES_URL ?? 'https://hermes.pyth.network';
+const PYTH_API_KEY = process.env.PYTH_API_KEY;
+const SAMPLE_SECONDS = Number(process.env.SAMPLE_SECONDS ?? 120);
+
+// The markets the product trades.
+const FEEDS = {
+    'BTC/USD': 'e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43',
+    'ETH/USD': 'ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace',
+};
+
+// Polls Hermes twice a second and records each distinct publishTime it serves.
+async function measureHermes() {
+    const url = `${HERMES_URL}/v2/updates/price/latest?${Object.values(FEEDS).map((id) => `ids[]=0x${id}`).join('&')}`;
+    const seen = new Map(Object.keys(FEEDS).map((name) => [name, new Set()]));
+    const until = Date.now() + SAMPLE_SECONDS * 1000;
+    console.log(`Polling Hermes for ${SAMPLE_SECONDS}s…`);
+    let polls = 0, failures = 0, firstError = '';
+    while (Date.now() < until) {
+        try {
+            const res = await fetch(url, { headers: { Authorization: `Bearer ${PYTH_API_KEY}` } });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const json = await res.json();
+            for (const p of json.parsed ?? []) {
+                const name = Object.keys(FEEDS).find((n) => FEEDS[n] === String(p.id).replace(/^0x/, ''));
+                if (name) seen.get(name).add(Number(p.price.publish_time));
+            }
+            polls++;
+        } catch (err) {
+            if (failures++ === 0) firstError = err.message;
+        }
+        await new Promise((r) => setTimeout(r, 500));
+    }
+    console.log(`\n${polls} polls, ${failures} failures${firstError ? ` (first: ${firstError})` : ''}.\n`);
+    console.log('feed       prices seen   median gap    p90     max   (seconds between fresh prices)');
+    for (const [name, times] of seen) {
+        const sorted = [...times].sort((a, b) => a - b);
+        const gaps = sorted.slice(1).map((t, i) => t - sorted[i]).sort((a, b) => a - b);
+        if (!gaps.length) { console.log(`${name.padEnd(10)} ${String(sorted.length).padStart(11)}   (not enough data)`); continue; }
+        const at = (p) => gaps[Math.min(gaps.length - 1, Math.floor(p * gaps.length))];
+        console.log([name.padEnd(10), String(sorted.length).padStart(11), `${at(0.5)}s`.padStart(12), `${at(0.9)}s`.padStart(7), `${gaps[gaps.length - 1]}s`.padStart(7)].join(' '));
+    }
+    console.log('\nThis is Pythnet\'s publish cadence: the number the staleness threshold should be set against.');
+}
+
+if (PYTH_API_KEY) {
+    await measureHermes();
+    process.exit(0);
+}
+console.log('No PYTH_API_KEY set: falling back to on-chain updates, which measure demand to push, not Pyth.\n');
+const PYTH = process.env.PYTH_ADDRESS ?? '0xff1a0f4744e8582DF1aE09D5611b887B6a12925C';
 const BLOCKS = Number(process.argv[2] ?? 6000);   // Arbitrum blocks are ~0.25s, so 6000 ≈ 25 minutes
 const WINDOW = 500;                                // getLogs window the public RPC accepts
 
 const topic0 = '0x' + bytesToHex(keccak_256(utf8ToBytes('PriceFeedUpdate(bytes32,uint64,int64,uint64)')));
 
 async function rpc(method, params) {
-    const res = await fetch(ARB_RPC, {
+    const res = await fetch(RPC, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
@@ -43,7 +97,7 @@ for (let start = from; start <= head; start += WINDOW) {
     const end = Math.min(start + WINDOW - 1, head);
     let batch;
     try {
-        batch = await rpc('eth_getLogs', [{ address: PYTH_ARBITRUM, topics: [topic0], fromBlock: hex(start), toBlock: hex(end) }]);
+        batch = await rpc('eth_getLogs', [{ address: PYTH, topics: [topic0], fromBlock: hex(start), toBlock: hex(end) }]);
     } catch (err) {
         console.warn(`  blocks ${start}–${end}: ${err.message}`);
         continue;
