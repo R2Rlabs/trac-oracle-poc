@@ -1,14 +1,4 @@
-```sh
-PYTH_API_KEY=... node scripts/measure-settlement.mjs --subnet-bootstrap=<hex32> --samples=20
-```
-
-The MSB bootstrap and channel come from the network itself, so they need no flags. For the record, from
-`trac-msb` and confirmed against Trac's `main_settlement_bus` v0.2.21:
-
-| Network | MSB bootstrap | Channel |
-| --- | --- | --- |
-| mainnet | `acbc3a4344d3a804101d40e53db1dda82b767646425af73599d4cd6577d69685` | `0000trac0network0msb0mainnet0000` |
-| testnet1 | `c184f4ad8e9cf5e911f9415b60e7dcfb30aed73ebd8a402ef68e1b154624f5ef` | `1111trac1network1msb1testnet1111` |# trac-oracle-poc
+# trac-oracle-poc
 
 Proof of concept: a Trac Network contract (`trac-peer` subnet app) that accepts price data only if it
 carries valid Pyth signatures. It verifies them on every node, so the subnet admin is not in the price path.
@@ -86,18 +76,24 @@ and waits until each one is readable from the signed view.
 
 It needs a real network, which means three things first:
 
-1. A subnet deployed with this contract. Use trac-peer's runner (`npm run peer:run -- --msb-bootstrap=…
-   --msb-channel=…`), then `/deploy_subnet` in its console; it prints the subnet bootstrap.
+1. A subnet deployed with this contract. Use trac-peer's runner, then `/deploy_subnet` in its console;
+   it prints the subnet bootstrap.
 2. This harness's peer added as a writer on that subnet (`/add_writer --key <its writer key>`), which
    the script tells you if it is missing.
 3. TNK in the peer's MSB address, which the script prints. Each transaction costs 0.03 TNK, so 20
    samples is 0.6 TNK.
 
 ```sh
-PYTH_API_KEY=... node scripts/measure-settlement.mjs \
-  --msb-bootstrap=<hex32> --msb-channel=<channel> \
-  --subnet-bootstrap=<hex32> --samples=20
+PYTH_API_KEY=... node scripts/measure-settlement.mjs --subnet-bootstrap=SUBNET_HEX --samples=20
 ```
+
+The MSB bootstrap and channel come from the chosen network (`--env=mainnet` by default), so they need no
+flags. For the record, from `trac-msb` and confirmed against Trac's own `main_settlement_bus` v0.2.21:
+
+| Network | MSB bootstrap | Channel |
+| --- | --- | --- |
+| mainnet | `acbc3a4344d3a804101d40e53db1dda82b767646425af73599d4cd6577d69685` | `0000trac0network0msb0mainnet0000` |
+| testnet1 | `c184f4ad8e9cf5e911f9415b60e7dcfb30aed73ebd8a402ef68e1b154624f5ef` | `1111trac1network1msb1testnet1111` |
 
 **Untested against a live network.** The argument handling and failure paths are exercised, but nothing
 here has run against a real MSB yet, because no subnet is deployed. Expect to fix something the first
