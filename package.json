@@ -16,5 +16,8 @@
   },
   "devDependencies": {
     "brittle": "^3.19.1"
+  },
+  "overrides": {
+    "hyperschema": "1.19.0"
   }
 }
