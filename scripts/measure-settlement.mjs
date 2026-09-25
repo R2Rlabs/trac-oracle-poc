@@ -6,10 +6,10 @@
 //   settled     until the price is readable from the SIGNED view, which is the number that matters
 //
 // Usage:
-//   PYTH_API_KEY=... node scripts/measure-settlement.mjs \
-//     --msb-bootstrap=<hex32> --msb-channel=<channel> \
-//     --subnet-bootstrap=<hex32> [--subnet-channel=trac-peer-subnet] \
-//     [--env=mainnet|testnet1|development] [--samples=20] [--interval=5000]
+//   PYTH_API_KEY=... node scripts/measure-settlement.mjs --subnet-bootstrap=<hex32> [--samples=20]
+//
+// The MSB bootstrap and channel default to the chosen network's own values (--env=mainnet by default;
+// testnet1 and development also work), so they only need passing for a private network.
 //
 // It starts a local MSB node that joins the given network, and a peer running the oracle contract.
 // The peer's MSB address must hold TNK: it pays 0.03 TNK per transaction. The script prints the
@@ -37,11 +37,19 @@ const need = (name, env) => {
 const KEY = process.env.PYTH_API_KEY;
 if (!KEY) { console.error('Set PYTH_API_KEY: the harness submits real Pyth updates.'); process.exit(1); }
 
-const msbBootstrap = need('msb-bootstrap', 'MSB_BOOTSTRAP').toLowerCase();
-const msbChannel = need('msb-channel', 'MSB_CHANNEL');
+const envName = (args.env ?? process.env.TRAC_ENV ?? 'mainnet').toUpperCase();
+if (!PEER_ENV[envName] || !MSB_ENV[envName]) { console.error(`Unknown --env ${envName}. Use mainnet, testnet1 or development.`); process.exit(1); }
+
+// trac-msb ships each network's MSB bootstrap and channel, so they only need overriding for a private
+// network. Verified against Trac's own main_settlement_bus repo (v0.2.21) on 2026-09-25.
+const envDefaults = createMsbConfig(MSB_ENV[envName], {});
+// The config hands these back as buffers; the flags take hex and a plain string.
+const defaultBootstrap = b4a.toString(envDefaults.bootstrap, 'hex');
+const defaultChannel = b4a.toString(envDefaults.channel, 'utf8').replace(/\0+$/, '');
+const msbBootstrap = String(args['msb-bootstrap'] ?? process.env.MSB_BOOTSTRAP ?? defaultBootstrap).toLowerCase();
+const msbChannel = args['msb-channel'] ?? process.env.MSB_CHANNEL ?? defaultChannel;
 const subnetBootstrap = need('subnet-bootstrap', 'SUBNET_BOOTSTRAP').toLowerCase();
 const subnetChannel = args['subnet-channel'] ?? process.env.SUBNET_CHANNEL ?? 'trac-peer-subnet';
-const envName = (args.env ?? process.env.TRAC_ENV ?? 'mainnet').toUpperCase();
 const SAMPLES = Number(args.samples ?? 20);
 const INTERVAL = Number(args.interval ?? 5000);          // gap between samples, ms
 const TIMEOUT = Number(args.timeout ?? 120_000);          // give up on a sample after this
@@ -51,8 +59,6 @@ for (const [name, hex] of [['msb-bootstrap', msbBootstrap], ['subnet-bootstrap',
     if (!/^[0-9a-f]{64}$/.test(hex)) { console.error(`--${name} must be 32-byte hex (64 chars).`); process.exit(1); }
 }
 if (msbBootstrap === subnetBootstrap) { console.error('The subnet bootstrap cannot equal the MSB bootstrap.'); process.exit(1); }
-if (!PEER_ENV[envName] || !MSB_ENV[envName]) { console.error(`Unknown --env ${envName}. Use mainnet, testnet1 or development.`); process.exit(1); }
-
 const BTC = Object.keys(FEEDS).find((id) => FEEDS[id] === 'BTC/USD') ?? Object.keys(FEEDS)[0];
 
 async function freshUpdate() {
@@ -125,7 +131,8 @@ await peer.ready();
 
 console.log(`\nMSB address: ${msbWallet.address ?? '(unknown)'}`);
 console.log(`Peer key:    ${peerWallet.publicKey}`);
-console.log(`Subnet:      ${subnetBootstrap} on channel "${subnetChannel}" (${envName})`);
+console.log(`Subnet:      ${subnetBootstrap} on channel "${subnetChannel}"`);
+console.log(`MSB:         ${msbBootstrap.slice(0, 16)}… on channel "${msbChannel}" (${envName})`);
 
 if (peer.base?.writable === false) {
     console.error(`\nThis peer is not a writer on that subnet, so it cannot submit. Have the subnet admin run:

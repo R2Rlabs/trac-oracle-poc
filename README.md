@@ -1,4 +1,14 @@
-# trac-oracle-poc
+```sh
+PYTH_API_KEY=... node scripts/measure-settlement.mjs --subnet-bootstrap=<hex32> --samples=20
+```
+
+The MSB bootstrap and channel come from the network itself, so they need no flags. For the record, from
+`trac-msb` and confirmed against Trac's `main_settlement_bus` v0.2.21:
+
+| Network | MSB bootstrap | Channel |
+| --- | --- | --- |
+| mainnet | `acbc3a4344d3a804101d40e53db1dda82b767646425af73599d4cd6577d69685` | `0000trac0network0msb0mainnet0000` |
+| testnet1 | `c184f4ad8e9cf5e911f9415b60e7dcfb30aed73ebd8a402ef68e1b154624f5ef` | `1111trac1network1msb1testnet1111` |# trac-oracle-poc
 
 Proof of concept: a Trac Network contract (`trac-peer` subnet app) that accepts price data only if it
 carries valid Pyth signatures. It verifies them on every node, so the subnet admin is not in the price path.
