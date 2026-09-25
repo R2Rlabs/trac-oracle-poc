@@ -4,3 +4,4 @@ sync-status.log
 pear-*.log
 deploy.log
 subnet-status.log
+measure-*.log

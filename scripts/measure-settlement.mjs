@@ -84,6 +84,7 @@ const msbConfig = createMsbConfig(MSB_ENV[envName], {
     bootstrap: msbBootstrap,
     channel: msbChannel,
     storeName: args['msb-store-name'] ?? 'latency-msb',
+    messageValidatorResponseTimeout: Number(args['send-timeout'] ?? 60000),
     storesDirectory: args['msb-stores-directory'] ?? STORES,
 });
 
@@ -108,7 +109,7 @@ const msbWallet = await loadOrCreateWallet(msbConfig.keyPairPath, {
 const msb = new MainSettlementBus(msbConfig, msbWallet);
 await msb.ready();
 
-const peerStoreName = args['peer-store-name'] ?? 'latency-peer';
+const peerStoreName = args['peer-store-name'] ?? 'oracle-subnet';
 const peerConfig = createPeerConfig(PEER_ENV[envName], {
     storesDirectory: STORES.endsWith('/') ? STORES : STORES + '/',
     storeName: peerStoreName,
