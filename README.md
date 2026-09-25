@@ -68,6 +68,33 @@ Not covered yet:
 - **Tx size.** trac-peer caps tx payloads at 4 KB by default (about 5 feeds per update). The protocol
   raises it to 8 KB.
 
+## Measuring settlement on a real subnet
+
+`scripts/measure-settlement.mjs` times how long a price update takes to go from submitted to agreed:
+the last unmeasured part of Halyard's 30-second staleness budget. It submits real signed Pyth updates
+and waits until each one is readable from the signed view.
+
+It needs a real network, which means three things first:
+
+1. A subnet deployed with this contract. Use trac-peer's runner (`npm run peer:run -- --msb-bootstrap=…
+   --msb-channel=…`), then `/deploy_subnet` in its console; it prints the subnet bootstrap.
+2. This harness's peer added as a writer on that subnet (`/add_writer --key <its writer key>`), which
+   the script tells you if it is missing.
+3. TNK in the peer's MSB address, which the script prints. Each transaction costs 0.03 TNK, so 20
+   samples is 0.6 TNK.
+
+```sh
+PYTH_API_KEY=... node scripts/measure-settlement.mjs \
+  --msb-bootstrap=<hex32> --msb-channel=<channel> \
+  --subnet-bootstrap=<hex32> --samples=20
+```
+
+**Untested against a live network.** The argument handling and failure paths are exercised, but nothing
+here has run against a real MSB yet, because no subnet is deployed. Expect to fix something the first
+time it runs.
+
+## Fixtures
+
 The fixtures are real BTC/USD and ETH/USD updates from Hermes, the markets the product trades. Since Pyth's
 Core upgrade (2026-08-26) Hermes needs an API key, from https://pythdata.app/signup; set `PYTH_API_KEY` and
 run `npm run fetch-fixtures` to refresh them. Without a key the script falls back to whatever was pushed
