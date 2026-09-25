@@ -2,3 +2,5 @@ node_modules/
 stores/
 sync-status.log
 pear-*.log
+deploy.log
+subnet-status.log
