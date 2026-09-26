@@ -95,9 +95,15 @@ flags. For the record, from `trac-msb` and confirmed against Trac's own `main_se
 | mainnet | `acbc3a4344d3a804101d40e53db1dda82b767646425af73599d4cd6577d69685` | `0000trac0network0msb0mainnet0000` |
 | testnet1 | `c184f4ad8e9cf5e911f9415b60e7dcfb30aed73ebd8a402ef68e1b154624f5ef` | `1111trac1network1msb1testnet1111` |
 
-**Untested against a live network.** The argument handling and failure paths are exercised, but nothing
-here has run against a real MSB yet, because no subnet is deployed. Expect to fix something the first
-time it runs.
+**Run against Trac mainnet, 25 September 2026.** Twenty samples on a deployed subnet, 0.6 TNK, none
+failed: median **10.4s**, p90 **26.3s**, max **28.7s**, measured from submitted to readable in the
+signed view. The first transaction on a cold node took **41s** — connection setup, not consensus —
+and every later sample on the same node was under 30s.
+
+That is one subnet, one node, one connection: it is a number for our own staleness budget, not a
+benchmark of the network. It moved our staleness threshold from 30s to 60s, because a normal 28s
+settlement was one bad moment from rejecting honest trades, and the economic protection is the
+per-order price band rather than staleness.
 
 ## Fixtures
 
